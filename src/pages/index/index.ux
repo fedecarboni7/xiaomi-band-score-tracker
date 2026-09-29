@@ -9,10 +9,36 @@
       </div>
     </div>
 
-    <div class="panel" if="{{ isGame }}">
+    <!-- MODO NORMAL: reloj arriba, marcador, botones, deshacer y cronómetro -->
+    <div class="panel-n" if="{{ isNormal }}">
+      <text class="clock-n">{{ clock }}</text>
+      <div class="score-box">
+        <text class="score-n score-n-sm" if="{{ scoreSmall }}">{{ score }}</text>
+        <text class="score-n" else>{{ score }}</text>
+      </div>
+      <div class="btn btn-home btn-n" onclick="goalHome">
+        <text class="btn-text">LOCAL</text>
+      </div>
+      <div class="btn btn-away btn-n" onclick="goalAway">
+        <text class="btn-text">VISITA</text>
+      </div>
+      <div class="btn btn-undo btn-undo-n" if="{{ canUndo }}" onclick="undo">
+        <text class="undo-text">DESHACER</text>
+      </div>
+      <div class="btn btn-undo btn-undo-n off" else>
+        <text class="undo-text">DESHACER</text>
+      </div>
+      <div class="chrono-box" onclick="toggleChrono">
+        <text class="chrono run" if="{{ chronoRunning }}">{{ chrono }}</text>
+        <text class="chrono" else>{{ chrono }}</text>
+      </div>
+    </div>
+
+    <!-- MODO TENIS: igual que antes -->
+    <div class="panel" if="{{ isTennis }}">
       <text class="clock">{{ clock }}</text>
       <text class="score">{{ score }}</text>
-      <text class="points" if="{{ isTennis }}">{{ points }}</text>
+      <text class="points">{{ points }}</text>
       <div class="btn btn-home" onclick="goalHome">
         <text class="btn-text">LOCAL</text>
       </div>
@@ -31,6 +57,9 @@
 
 <script>
 import vibrator from '@system.vibrator'
+
+// --- normal limit ---
+const MAX_GOALS = 99
 
 // --- tennis logic (pure) ---
 const POINTS = ['0', '15', '30', '40']
@@ -98,18 +127,26 @@ export default {
     mode: 'menu',
     isMenu: true,
     isGame: false,
+    isNormal: false,
     isTennis: false,
+    scoreSmall: false,
     score: '0 - 0',
     points: '0 - 0',
     history: [],
     canUndo: false,
     setOver: false,
     clock: '--:--',
-    timer: null
+    timer: null,
+    // cronómetro (solo modo normal)
+    chrono: '00:00',
+    chronoRunning: false,
+    chronoStart: 0, // Date.now() del último "play"
+    chronoAcc: 0 // ms acumulados antes del último "play"
   },
   onInit() {
     this.tick()
-    this.timer = setInterval(() => this.tick(), 1000)
+    // 500 ms para que el cronómetro no se saltee segundos por jitter del timer
+    this.timer = setInterval(() => this.tick(), 500)
   },
   onShow() {
     this.tick()
@@ -122,6 +159,9 @@ export default {
       this.mode = 'menu'
       this.isMenu = true
       this.isGame = false
+      this.isNormal = false
+      this.isTennis = false
+      this.resetChrono()
       return true
     }
     return false
@@ -131,6 +171,7 @@ export default {
     const h = ('0' + d.getHours()).slice(-2)
     const m = ('0' + d.getMinutes()).slice(-2)
     this.clock = h + ':' + m
+    if (this.chronoRunning) this.updateChrono()
   },
   startNormal() {
     this.enter('normal')
@@ -141,8 +182,10 @@ export default {
   enter(mode) {
     this.mode = mode
     this.history = []
+    this.resetChrono()
     this.isMenu = false
     this.isGame = true
+    this.isNormal = mode === 'normal'
     this.isTennis = mode === 'tennis'
     this.refresh()
   },
@@ -153,16 +196,54 @@ export default {
     this.addPoint('away')
   },
   addPoint(who) {
-    if (this.setOver) return
-    this.history = this.history.concat([who])
-    this.refresh()
-    this.buzz(this.setOver ? 'long' : 'short')
-  },
+  if (this.setOver) return
+  if (this.mode === 'normal' && this.countSide(who) >= MAX_GOALS) {
+    this.buzz('long')
+    return
+  }
+  this.history = this.history.concat([who])
+  this.refresh()
+  this.buzz(this.setOver ? 'long' : 'short')
+},
+countSide(who) {
+  let n = 0
+  for (let i = 0; i < this.history.length; i++) {
+    if (this.history[i] === who) n += 1
+  }
+  return n
+},
   undo() {
     if (this.history.length === 0) return
     this.history = this.history.slice(0, -1)
     this.refresh()
     this.buzz('short')
+  },
+  // --- cronómetro: se calcula con timestamps, no sumando segundos ---
+  toggleChrono() {
+    if (this.chronoRunning) {
+      this.chronoAcc += Date.now() - this.chronoStart
+      this.chronoRunning = false
+    } else {
+      this.chronoStart = Date.now()
+      this.chronoRunning = true
+    }
+    this.updateChrono()
+    this.buzz('short')
+  },
+  updateChrono() {
+    let ms = this.chronoAcc
+    if (this.chronoRunning) ms += Date.now() - this.chronoStart
+    const total = Math.floor(ms / 1000)
+    const m = Math.floor(total / 60)
+    const s = total % 60
+    // pasados los 99 minutos el campo de minutos simplemente crece (100:00)
+    this.chrono = (m < 10 ? '0' + m : '' + m) + ':' + (s < 10 ? '0' + s : '' + s)
+  },
+  resetChrono() {
+    this.chronoRunning = false
+    this.chronoStart = 0
+    this.chronoAcc = 0
+    this.chrono = '00:00'
   },
   refresh() {
     this.canUndo = this.history.length > 0
@@ -182,6 +263,7 @@ export default {
         }
       }
       this.score = h + ' - ' + a
+      this.scoreSmall = this.score.length > 6
       this.setOver = false
     }
   },
@@ -251,5 +333,83 @@ export default {
 .undo-text {
   font-size: 22px;
   color: #ffffff;
+}
+
+/* ============================================================
+   MODO NORMAL: todo lo que se puede ajustar a mano está acá.
+   Los valores de tenis (.panel, .clock, .score, .btn) no se tocan.
+   ============================================================ */
+
+/* AJUSTAR: justify-content
+   flex-start = todo pegado arriba (usa margin-top del reloj para bajar/subir)
+   center     = vuelve a centrar el bloque completo en la pantalla */
+.panel-n {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* AJUSTAR: margin-top = distancia entre el borde de arriba y la hora.
+   Si la esquina curva de la pantalla la corta, subí este número.
+   font-size = tamaño de la hora. */
+.clock-n {
+  font-size: 32px;
+  color: #9aa0a6;
+  margin-top: 16px;
+  margin-bottom: 6px;
+}
+
+/* AJUSTAR: height = alto fijo de la fila del marcador (evita que los botones salten
+   cuando cambia el tamaño). Si el layout se ve distinto a antes, probá 60-70.
+   margin-bottom = aire hasta LOCAL (antes estaba en .score-n) */
+   .score-box {
+  height: 66px;
+  margin-bottom: 12px;
+  align-items: center;
+  justify-content: center;
+}
+.score-n {
+  font-size: 56px;
+  font-weight: bold;
+  color: #ffffff;
+}
+/* AJUSTAR: tamaño cuando algún lado tiene 2 dígitos (se combina con .score-n) */
+.score-n-sm {
+  font-size: 44px;
+}
+
+/* AJUSTAR: alto de LOCAL / VISITA solo en modo normal.
+   Regla: border-radius = height / 2. Antes eran 80px / 40px. */
+/* separación entre LOCAL y VISITA (y entre marcador y LOCAL) */
+.btn-n {
+  height: 80px;
+  border-radius: 40px;
+  margin-top: 14px;   /* antes 8 */
+}
+
+/* separación entre VISITA y DESHACER: subilo para bajarlo más */
+.btn-undo-n {
+  margin-top: 20px;   /* antes 10 (heredado de .btn) */
+}
+
+/* AJUSTAR: zona táctil del cronómetro (height), separación con DESHACER (margin-top)
+   y tamaño del número (font-size en .chrono). */
+/* separación entre DESHACER y el cronómetro: cuanto más alto, más pegado al borde inferior */
+.chrono-box {
+  width: 150px;
+  height: 48px;
+  margin-top: 22px;
+  align-items: center;
+  justify-content: center;
+}
+.chrono {
+  font-size: 36px;
+  color: #e8eaed;
+}
+/* color mientras corre (se combina con .chrono) */
+.run {
+  color: #4cd471;
 }
 </style>

@@ -11,7 +11,7 @@ Marcador rápido para la muñeca: una app propia (Vela JS) para la Xiaomi Smart 
 - [x] Hora actual
 - [x] Deshacer el último punto
 - [x] Contador normal y de tenis
-- [ ] Cronómetro
+- [x] Cronómetro
 
 ## Probado con
 
