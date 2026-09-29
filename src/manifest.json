@@ -2,7 +2,7 @@
   "package": "com.fede.matchtracker",
   "name": "score-tracker",
   "versionName": "1.0.0",
-  "versionCode": 5,
+  "versionCode": 6,
   "minPlatformVersion": 1000,
   "icon": "/common/logo.png",
   "deviceTypeList": [

@@ -46,18 +46,18 @@ Xiaomi documenta la instalación de paquetes `.rpk` propios en un menú de depur
 
 Recomendaciones de seguridad:
 
-- Leé los scripts de ese repositorio antes de ejecutarlos. Se ejecutan con permisos de shell de ADB en tu teléfono.
+- `tools/LaunchFragment.java` es código de terceros que se ejecuta con permisos de shell de ADB en tu teléfono; conviene leerlo antes de correrlo.
 - Activá la depuración USB solo mientras desplegás y revocá las autorizaciones después.
 - No uses versiones modificadas de Mi Fitness ni módulos de root.
 
 Flujo:
 
-1. Clonar `xiaomi-band-development` y revisar sus scripts.
+1. Instalar ADB, JDK y el Android SDK (`build-tools` y `platforms`). Si el SDK no está en `~/Library/Android/sdk`, definir `ANDROID_HOME`.
 2. Conectar el teléfono por USB, desbloquearlo y abrir Mi Fitness con la banda emparejada.
 3. Ejecutar `./deploy-band.sh`. Sube el `versionCode`, compila, instala y limpia archivos temporales.
 4. Elegir el `.rpk` en el selector de archivos del teléfono.
 
-El script de terceros está pensado para el teclado de Samsung. Con otros teclados (por ejemplo Gboard) el tipeo automático del nombre del paquete puede fallar; en ese caso escribilo a mano.
+El tipeo automático del nombre del paquete está pensado para el teclado de Samsung. Con otros teclados (por ejemplo Gboard) puede fallar; en ese caso escribilo a mano.
 
 ## Estructura
 
@@ -65,12 +65,15 @@ El script de terceros está pensado para el teclado de Samsung. Con otros teclad
 src/
   manifest.json    configuración de la app (paquete, permisos, ruta)
   pages/           pantallas
+tools/
+  LaunchFragment.java  launcher para abrir la pantalla de instalación
 deploy-band.sh     compilar e instalar en la banda física
 ```
 
 ## Créditos
 
 - Método de instalación: [oryonatan/xiaomi-band-development](https://github.com/oryonatan/xiaomi-band-development)
+- `tools/LaunchFragment.java`: código proveniente de [oryonatan/xiaomi-band-development](https://github.com/oryonatan/xiaomi-band-development), bajo licencia MIT.
 - Documentación de Vela JS: [iot.mi.com/vela](https://iot.mi.com/vela/quickapp/en/)
 
 ## Licencia

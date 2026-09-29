@@ -6,22 +6,16 @@
 # Uso:  ./deploy-band.sh
 #
 # Variables opcionales:
-#   BAND_TOOLS_DIR   carpeta del repo xiaomi-band-development
 #   PHONE_SERIAL     serial ADB del teléfono
 #
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TOOLS_DIR="${BAND_TOOLS_DIR:-$HOME/repos/xiaomi-band-development}"
 PHONE_SERIAL="${PHONE_SERIAL:-}"
 MANIFEST="$PROJECT_DIR/src/manifest.json"
+ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
 
 # --- 1. Chequeos rápidos ---
-if [ ! -x "$TOOLS_DIR/scripts/deploy.sh" ]; then
-    echo "ERROR: no encuentro $TOOLS_DIR/scripts/deploy.sh"
-    exit 1
-fi
-
 if ! grep -q '"build"' "$PROJECT_DIR/package.json"; then
     echo "ERROR: package.json no tiene un script \"build\"."
     exit 1
@@ -56,14 +50,52 @@ console.log("==> versionCode ->", m.versionCode);
 # --- 3. Borrar .rpk viejos para que se use siempre el recién compilado ---
 rm -f "$PROJECT_DIR"/dist/*.rpk
 
-# --- 4. Compilar e instalar (delegado al script revisado) ---
-"$TOOLS_DIR/scripts/deploy.sh" --project "$PROJECT_DIR" --serial "$PHONE_SERIAL" || {
-    echo "El deploy falló. Limpio y salgo."
-    STATUS=1
-}
+# --- 4. Compilar e instalar ---
+PKG_NAME="$(node -e "console.log(JSON.parse(require('fs').readFileSync('$MANIFEST')).package)")"
+RPK_FILENAME="$(echo "$PKG_NAME" | tr '.' '_').rpk"
+PLATFORM="$(ls -d "$ANDROID_HOME"/platforms/android-* 2>/dev/null | sort -V | tail -1)/android.jar"
+BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | sort -V | tail -1)"
+LAUNCH_DEX="/data/local/tmp/launch.dex"
+LAUNCH_TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$LAUNCH_TMP_DIR"; adb -s "$PHONE_SERIAL" shell rm -f "$LAUNCH_DEX" 2>/dev/null || true' EXIT
 
-# --- 5. Limpieza (incluye el volcado de pantalla del teléfono) ---
-adb -s "$PHONE_SERIAL" shell rm -f /data/local/tmp/launch.dex /sdcard/ui_tmp.xml 2>/dev/null || true
-rm -f /tmp/ui_tmp.xml /tmp/LaunchFragment.java
+if [ ! -f "$PLATFORM" ] || [ ! -d "$BUILD_TOOLS" ]; then
+    echo "ERROR: no encuentro Android SDK, platform o build-tools en $ANDROID_HOME"
+    exit 1
+fi
 
-exit "${STATUS:-0}"
+echo "==> Compilando..."
+(cd "$PROJECT_DIR" && npm run build 2>&1 | tail -15)
+RPK_FILE="$(find "$PROJECT_DIR/dist" -name '*.rpk' -type f | sort -r | head -1)"
+if [ -z "$RPK_FILE" ]; then
+    echo "ERROR: no encuentro un .rpk en $PROJECT_DIR/dist/"
+    exit 1
+fi
+
+echo "==> Compilando launcher..."
+mkdir -p "$LAUNCH_TMP_DIR/classes" "$LAUNCH_TMP_DIR/dex"
+javac -source 8 -target 8 -bootclasspath "$PLATFORM" \
+    "$PROJECT_DIR/tools/LaunchFragment.java" -d "$LAUNCH_TMP_DIR/classes"
+"$BUILD_TOOLS/d8" "$LAUNCH_TMP_DIR/classes/LaunchFragment.class" \
+    --output "$LAUNCH_TMP_DIR/dex"
+adb -s "$PHONE_SERIAL" push "$LAUNCH_TMP_DIR/dex/classes.dex" "$LAUNCH_DEX"
+
+adb -s "$PHONE_SERIAL" shell mkdir -p /sdcard/Xiaomi-band 2>/dev/null || true
+adb -s "$PHONE_SERIAL" push "$RPK_FILE" "/sdcard/Xiaomi-band/$RPK_FILENAME"
+APK_PATH="$(adb -s "$PHONE_SERIAL" shell pm path com.xiaomi.wearable | head -1 | sed 's/package://' | tr -d '\r' || true)"
+if [ -z "$APK_PATH" ]; then
+    echo "ERROR: Mi Fitness (com.xiaomi.wearable) no está instalado"
+    exit 1
+fi
+
+echo "==> Abriendo la pantalla de instalación..."
+RESULT="$(adb -s "$PHONE_SERIAL" shell "CLASSPATH=$LAUNCH_DEX app_process / LaunchFragment $APK_PATH" 2>&1 || true)"
+if ! echo "$RESULT" | grep -q 'SUCCESS'; then
+    echo "ERROR: no pude abrir la pantalla de instalación: $RESULT"
+    exit 1
+fi
+
+echo "==> Pasos manuales en el teléfono:"
+echo "1. Tocá \"click to input package name\", escribí $PKG_NAME y aceptá."
+echo "2. Tocá \"install third app\"."
+echo "3. Elegí $RPK_FILENAME en la carpeta Xiaomi-band."
