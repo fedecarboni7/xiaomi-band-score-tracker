@@ -1,18 +1,30 @@
 <template>
   <div class="page">
-    <text class="clock">{{ clock }}</text>
-    <text class="score">{{ home }} - {{ away }}</text>
-    <div class="btn btn-home" onclick="goalHome">
-      <text class="btn-text">LOCAL</text>
+    <div class="panel" if="{{ isMenu }}">
+      <div class="btn btn-home" onclick="startNormal">
+        <text class="btn-text">NORMAL</text>
+      </div>
+      <div class="btn btn-away" onclick="startTennis">
+        <text class="btn-text">TENIS</text>
+      </div>
     </div>
-    <div class="btn btn-away" onclick="goalAway">
-      <text class="btn-text">VISITA</text>
-    </div>
-    <div class="btn btn-undo" if="{{ canUndo }}" onclick="undo">
-      <text class="undo-text">DESHACER</text>
-    </div>
-    <div class="btn btn-undo off" else>
-      <text class="undo-text">DESHACER</text>
+
+    <div class="panel" if="{{ isGame }}">
+      <text class="clock">{{ clock }}</text>
+      <text class="score">{{ score }}</text>
+      <text class="points" if="{{ isTennis }}">{{ points }}</text>
+      <div class="btn btn-home" onclick="goalHome">
+        <text class="btn-text">LOCAL</text>
+      </div>
+      <div class="btn btn-away" onclick="goalAway">
+        <text class="btn-text">VISITA</text>
+      </div>
+      <div class="btn btn-undo" if="{{ canUndo }}" onclick="undo">
+        <text class="undo-text">DESHACER</text>
+      </div>
+      <div class="btn btn-undo off" else>
+        <text class="undo-text">DESHACER</text>
+      </div>
     </div>
   </div>
 </template>
@@ -20,12 +32,78 @@
 <script>
 import vibrator from '@system.vibrator'
 
+// --- tennis logic (pure) ---
+const POINTS = ['0', '15', '30', '40']
+
+// Returns 'home' / 'away' if that side has won the set, otherwise null.
+// 6-0..6-4, 7-5 and 7-6 (after tie-break) end the set.
+function setWinner(gh, ga) {
+  if (gh >= 6 && gh - ga >= 2) return 'home'
+  if (ga >= 6 && ga - gh >= 2) return 'away'
+  if (gh === 7) return 'home'
+  if (ga === 7) return 'away'
+  return null
+}
+
+// Replays the list of points ('home' / 'away') from zero.
+function computeTennis(history) {
+  let gh = 0
+  let ga = 0
+  let ph = 0
+  let pa = 0
+  let tb = false
+  let over = false
+  for (let i = 0; i < history.length; i++) {
+    if (history[i] === 'home') {
+      ph += 1
+    } else {
+      pa += 1
+    }
+    const diff = ph - pa
+    const lead = Math.max(ph, pa)
+    const gameWon = tb
+      ? lead >= 7 && Math.abs(diff) >= 2
+      : lead >= 4 && Math.abs(diff) >= 2
+    if (gameWon) {
+      if (diff > 0) {
+        gh += 1
+      } else {
+        ga += 1
+      }
+      ph = 0
+      pa = 0
+      tb = false
+      if (setWinner(gh, ga)) {
+        over = true
+        break
+      }
+      tb = gh === 6 && ga === 6
+    }
+  }
+  return { gh: gh, ga: ga, ph: ph, pa: pa, tb: tb, over: over }
+}
+
+function formatPoints(s) {
+  if (s.tb) return s.ph + ' - ' + s.pa
+  if (s.ph >= 3 && s.pa >= 3) {
+    if (s.ph === s.pa) return '40 - 40'
+    return s.ph > s.pa ? 'AD - 40' : '40 - AD'
+  }
+  return POINTS[s.ph] + ' - ' + POINTS[s.pa]
+}
+// --- end tennis logic ---
+
 export default {
   private: {
-    home: 0,
-    away: 0,
+    mode: 'menu',
+    isMenu: true,
+    isGame: false,
+    isTennis: false,
+    score: '0 - 0',
+    points: '0 - 0',
     history: [],
     canUndo: false,
+    setOver: false,
     clock: '--:--',
     timer: null
   },
@@ -39,39 +117,77 @@ export default {
   onDestroy() {
     clearInterval(this.timer)
   },
+  onBackPress() {
+    if (this.isGame) {
+      this.mode = 'menu'
+      this.isMenu = true
+      this.isGame = false
+      return true
+    }
+    return false
+  },
   tick() {
     const d = new Date()
     const h = ('0' + d.getHours()).slice(-2)
     const m = ('0' + d.getMinutes()).slice(-2)
     this.clock = h + ':' + m
   },
+  startNormal() {
+    this.enter('normal')
+  },
+  startTennis() {
+    this.enter('tennis')
+  },
+  enter(mode) {
+    this.mode = mode
+    this.history = []
+    this.isMenu = false
+    this.isGame = true
+    this.isTennis = mode === 'tennis'
+    this.refresh()
+  },
   goalHome() {
-    this.home += 1
-    this.history = this.history.concat(['home'])
-    this.canUndo = true
-    this.buzz()
+    this.addPoint('home')
   },
   goalAway() {
-    this.away += 1
-    this.history = this.history.concat(['away'])
-    this.canUndo = true
-    this.buzz()
+    this.addPoint('away')
+  },
+  addPoint(who) {
+    if (this.setOver) return
+    this.history = this.history.concat([who])
+    this.refresh()
+    this.buzz(this.setOver ? 'long' : 'short')
   },
   undo() {
-    const last = this.history[this.history.length - 1]
-    if (!last) return
-    if (last === 'home') {
-      this.home -= 1
-    } else {
-      this.away -= 1
-    }
+    if (this.history.length === 0) return
     this.history = this.history.slice(0, -1)
-    this.canUndo = this.history.length > 0
-    this.buzz()
+    this.refresh()
+    this.buzz('short')
   },
-  buzz() {
+  refresh() {
+    this.canUndo = this.history.length > 0
+    if (this.mode === 'tennis') {
+      const s = computeTennis(this.history)
+      this.score = s.gh + ' - ' + s.ga
+      this.points = s.over ? 'FIN' : formatPoints(s)
+      this.setOver = s.over
+    } else {
+      let h = 0
+      let a = 0
+      for (let i = 0; i < this.history.length; i++) {
+        if (this.history[i] === 'home') {
+          h += 1
+        } else {
+          a += 1
+        }
+      }
+      this.score = h + ' - ' + a
+      this.setOver = false
+    }
+  },
+  buzz(mode) {
     try {
-      vibrator.vibrate({ mode: 'short' })
+      vibrator.vibrate({ mode: mode || 'short' })
     } catch (e) {}
   }
 }
@@ -81,10 +197,14 @@ export default {
 .page {
   width: 100%;
   height: 100%;
+  background-color: #000000;
+}
+.panel {
+  width: 100%;
+  height: 100%;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background-color: #000000;
 }
 .clock {
   font-size: 32px;
@@ -96,6 +216,11 @@ export default {
   font-weight: bold;
   color: #ffffff;
   margin-bottom: 16px;
+}
+.points {
+  font-size: 40px;
+  color: #f2c94c;
+  margin-bottom: 8px;
 }
 .btn {
   width: 150px;
