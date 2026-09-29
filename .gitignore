@@ -7,4 +7,5 @@
 dist/
 build/
 sign/
+.vscode/
 .DS_Store
