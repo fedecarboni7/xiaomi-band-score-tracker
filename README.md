@@ -1,18 +1,17 @@
 # Score Tracker para Xiaomi Smart Band 9
 
-Marcador rápido para la muñeca: una app propia (Vela JS) para la Xiaomi Smart Band 9 que permite sumar puntos o goles a dos equipos con un toque, sin sacar el teléfono. No está pensada para un solo deporte: sirve para fútbol, pádel, básquet, juegos de cartas o cualquier cosa que lleve un marcador.
+Marcador rápido para la muñeca: una app propia (Vela JS) para la Xiaomi Smart Band 9 que permite sumar puntos o goles a dos equipos con un toque, sin sacar el teléfono. No está pensada para un solo deporte: sirve para fútbol, tenis, pádel, básquet, juegos de cartas o cualquier cosa que lleve un marcador.
 
 > Proyecto personal y en desarrollo. No está afiliado a Xiaomi.
 
 ## Estado
 
 - [x] Marcador con dos botones (local / visita)
-- [x] Probado en el emulador y en una Band 9 física
-- [x] Vibración al sumar (declarada en el código; falta confirmarla en la banda real)
+- [x] Vibración al sumar
 - [x] Hora actual
 - [x] Deshacer el último punto
+- [x] Contador normal y de tenis
 - [ ] Cronómetro
-- [ ] Iniciar / pausar / finalizar / resetear
 
 ## Probado con
 
