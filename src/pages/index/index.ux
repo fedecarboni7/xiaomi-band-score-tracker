@@ -1,11 +1,18 @@
 <template>
   <div class="page">
+    <text class="clock">{{ clock }}</text>
     <text class="score">{{ home }} - {{ away }}</text>
     <div class="btn btn-home" onclick="goalHome">
       <text class="btn-text">LOCAL</text>
     </div>
     <div class="btn btn-away" onclick="goalAway">
       <text class="btn-text">VISITA</text>
+    </div>
+    <div class="btn btn-undo" if="{{ canUndo }}" onclick="undo">
+      <text class="undo-text">DESHACER</text>
+    </div>
+    <div class="btn btn-undo off" else>
+      <text class="undo-text">DESHACER</text>
     </div>
   </div>
 </template>
@@ -16,14 +23,50 @@ import vibrator from '@system.vibrator'
 export default {
   private: {
     home: 0,
-    away: 0
+    away: 0,
+    history: [],
+    canUndo: false,
+    clock: '--:--',
+    timer: null
+  },
+  onInit() {
+    this.tick()
+    this.timer = setInterval(() => this.tick(), 1000)
+  },
+  onShow() {
+    this.tick()
+  },
+  onDestroy() {
+    clearInterval(this.timer)
+  },
+  tick() {
+    const d = new Date()
+    const h = ('0' + d.getHours()).slice(-2)
+    const m = ('0' + d.getMinutes()).slice(-2)
+    this.clock = h + ':' + m
   },
   goalHome() {
     this.home += 1
+    this.history = this.history.concat(['home'])
+    this.canUndo = true
     this.buzz()
   },
   goalAway() {
     this.away += 1
+    this.history = this.history.concat(['away'])
+    this.canUndo = true
+    this.buzz()
+  },
+  undo() {
+    const last = this.history[this.history.length - 1]
+    if (!last) return
+    if (last === 'home') {
+      this.home -= 1
+    } else {
+      this.away -= 1
+    }
+    this.history = this.history.slice(0, -1)
+    this.canUndo = this.history.length > 0
     this.buzz()
   },
   buzz() {
@@ -43,17 +86,22 @@ export default {
   justify-content: center;
   background-color: #000000;
 }
+.clock {
+  font-size: 32px;
+  color: #9aa0a6;
+  margin-bottom: 8px;
+}
 .score {
   font-size: 56px;
   font-weight: bold;
   color: #ffffff;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 .btn {
   width: 150px;
-  height: 88px;
-  border-radius: 44px;
-  margin-top: 14px;
+  height: 80px;
+  border-radius: 40px;
+  margin-top: 10px;
   align-items: center;
   justify-content: center;
 }
@@ -63,8 +111,20 @@ export default {
 .btn-away {
   background-color: #2b4c8c;
 }
+.btn-undo {
+  height: 56px;
+  border-radius: 28px;
+  background-color: #5f6368;
+}
+.off {
+  opacity: 0.3;
+}
 .btn-text {
   font-size: 28px;
+  color: #ffffff;
+}
+.undo-text {
+  font-size: 22px;
   color: #ffffff;
 }
 </style>

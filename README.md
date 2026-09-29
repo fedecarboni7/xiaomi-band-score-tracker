@@ -9,8 +9,9 @@ Marcador rápido para la muñeca: una app propia (Vela JS) para la Xiaomi Smart 
 - [x] Marcador con dos botones (local / visita)
 - [x] Probado en el emulador y en una Band 9 física
 - [x] Vibración al sumar (declarada en el código; falta confirmarla en la banda real)
+- [x] Hora actual
+- [x] Deshacer el último punto
 - [ ] Cronómetro
-- [ ] Deshacer el último punto
 - [ ] Iniciar / pausar / finalizar / resetear
 
 ## Probado con
